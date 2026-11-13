@@ -1,0 +1,189 @@
+{
+  "description": "Sample notes and test questions for measuring retrieval. Each question names the one note that answers it. Half the questions reuse the note's wording; half are paraphrased so they share few keywords with it.",
+  "documents": [
+    {
+      "id": "caching",
+      "title": "Caching strategies",
+      "text": "# Caching strategies\n\nCache-aside (lazy loading): the application checks the cache first and, on a miss, reads the database and writes the result back to the cache. Simple, but the first request after expiry is slow.\n\nWrite-through: every write goes to the cache and the database together, so reads are always warm, at the cost of slower writes.\n\nWrite-behind: writes land in the cache and are flushed to the database asynchronously. Fast, but data is lost if the cache node dies before the flush.\n\nEviction: LRU removes the least recently used key; LFU removes the least frequently used. Set a TTL on everything so stale entries eventually disappear.\n\nA cache stampede happens when a hot key expires and many requests rebuild it at once. Fix it with a lock around the rebuild or by adding random jitter to expiry times."
+    },
+    {
+      "id": "cdn",
+      "title": "How CDNs work",
+      "text": "# How CDNs work\n\nA content delivery network keeps copies of static assets (images, scripts, video segments) on edge servers spread around the world. A visitor is routed to the nearest edge location, usually through anycast or DNS-based routing, which cuts round-trip latency.\n\nIf the edge does not have the file, it pulls it from the origin server once and keeps it according to the Cache-Control header.\n\nTo push out a new version, either purge the old object or, better, put a content hash in the filename so every release gets a brand new URL and old copies simply stop being requested.\n\nCDNs also absorb traffic spikes and DDoS floods because the origin only sees cache misses."
+    },
+    {
+      "id": "db-indexes",
+      "title": "Database indexes",
+      "text": "# Database indexes\n\nAn index is a sorted side structure that lets the database find rows without scanning the whole table. Most relational databases use B-tree indexes, which support equality and range lookups.\n\nA composite index on (a, b) can serve queries filtering on a, or on a and b, but not on b alone: the leftmost prefix rule.\n\nA covering index contains every column the query needs, so the engine never touches the table itself.\n\nIndexes are not free. Each one slows down INSERT, UPDATE and DELETE because it has to be maintained, and it takes disk space. Use EXPLAIN to check whether a query actually uses the index before adding another one. Low-selectivity columns such as booleans rarely benefit."
+    },
+    {
+      "id": "isolation",
+      "title": "Transaction isolation levels",
+      "text": "# Transaction isolation levels\n\nACID transactions promise atomicity, consistency, isolation and durability. Isolation comes in levels that trade safety for concurrency.\n\nRead uncommitted allows dirty reads: seeing another transaction's uncommitted changes.\n\nRead committed prevents dirty reads but allows non-repeatable reads, where the same row read twice returns different values.\n\nRepeatable read fixes that but can still show phantom rows: new rows that match a filter appearing mid-transaction.\n\nSerializable behaves as if transactions ran one after another. It is the safest and the slowest, and transactions may be aborted and need a retry.\n\nPostgreSQL defaults to read committed. MySQL InnoDB defaults to repeatable read."
+    },
+    {
+      "id": "cap",
+      "title": "CAP theorem",
+      "text": "# CAP theorem\n\nA distributed data store can guarantee at most two of three properties: consistency (every read sees the latest write), availability (every request gets a non-error response) and partition tolerance (the system keeps working when the network splits).\n\nNetwork partitions are a fact of life, so the real choice is what to do during one. A CP system refuses some requests to stay consistent; examples are ZooKeeper and etcd. An AP system keeps answering and reconciles later, giving eventual consistency; examples are Cassandra and DynamoDB.\n\nPACELC extends the idea: even when there is no partition, you trade latency against consistency."
+    },
+    {
+      "id": "raft",
+      "title": "Raft consensus",
+      "text": "# Raft consensus\n\nRaft keeps a replicated log identical across a cluster of servers. Time is divided into terms. In each term at most one leader exists.\n\nLeader election: a follower that hears no heartbeat within a randomized timeout becomes a candidate, increments the term and asks for votes. A candidate that gets votes from a majority becomes leader. The random timeout makes split votes rare.\n\nLog replication: clients send commands to the leader, which appends them to its log and sends them to followers. An entry is committed once a majority has stored it.\n\nA cluster of five nodes tolerates two failures, because three still form a majority (a quorum)."
+    },
+    {
+      "id": "queues",
+      "title": "Message queues",
+      "text": "# Message queues\n\nA queue decouples the service that produces work from the one that consumes it. The producer returns immediately and the consumer processes at its own pace, which smooths out bursts.\n\nDelivery guarantees: at-most-once may drop messages; at-least-once may deliver duplicates; exactly-once is expensive and usually simulated. With at-least-once, make consumers idempotent so processing the same message twice is harmless.\n\nMessages that keep failing go to a dead letter queue for inspection instead of blocking the line.\n\nRabbitMQ is a traditional broker that routes and deletes messages after acknowledgement. Kafka is a durable append-only log: consumers track their own offset and can replay history."
+    },
+    {
+      "id": "rate-limiting",
+      "title": "Rate limiting algorithms",
+      "text": "# Rate limiting algorithms\n\nToken bucket: a bucket fills with tokens at a fixed rate up to a maximum. Each request spends one token. Allows short bursts up to the bucket size while enforcing an average rate.\n\nLeaky bucket: requests enter a queue that drains at a constant rate, producing perfectly smooth output and no bursts.\n\nFixed window: count requests per calendar minute. Cheap, but a client can send double the limit across a window boundary.\n\nSliding window: weights the previous window's count to remove that boundary problem.\n\nWhen a client is over the limit, respond with HTTP 429 Too Many Requests and a Retry-After header. In a cluster, keep the counters in Redis so all servers share them."
+    },
+    {
+      "id": "oauth",
+      "title": "OAuth 2.0 authorization code flow",
+      "text": "# OAuth 2.0 authorization code flow\n\nOAuth lets a user grant an application limited access to their account on another service without handing over the password.\n\n1. The app redirects the user to the authorization server with its client id, requested scopes and a redirect URI.\n2. The user logs in and approves the consent screen.\n3. The server redirects back with a short-lived authorization code.\n4. The app's backend exchanges the code for an access token, and usually a refresh token.\n\nPKCE protects public clients such as mobile and single-page apps: the app sends a hashed code challenge up front and proves it knows the original verifier when exchanging the code, so a stolen code is useless.\n\nAccess tokens expire quickly; the refresh token gets a new one without bothering the user."
+    },
+    {
+      "id": "jwt",
+      "title": "JSON Web Tokens",
+      "text": "# JSON Web Tokens\n\nA JWT has three base64url parts separated by dots: header, payload and signature. The payload carries claims such as sub (the user id), exp (expiry) and iat (issued at).\n\nThe signature proves the token was issued by the server and not modified. HS256 uses one shared secret; RS256 signs with a private key and anyone can verify with the public key.\n\nThe payload is only encoded, not encrypted. Anyone holding the token can read it, so never put secrets in it.\n\nBecause the server keeps no session state, a JWT cannot easily be revoked before it expires. Keep lifetimes short, or maintain a deny list. In browsers, store it in an httpOnly cookie rather than localStorage to limit theft through XSS."
+    },
+    {
+      "id": "tls",
+      "title": "TLS handshake",
+      "text": "# TLS handshake\n\nTLS gives a connection confidentiality, integrity and server authentication. HTTPS is HTTP over TLS.\n\nIn TLS 1.3 the client hello lists supported cipher suites and includes a key share. The server replies with its own key share and its certificate. Both sides derive the same session keys with Diffie-Hellman, so the handshake costs only one round trip.\n\nThe certificate binds the server's public key to its domain name and is signed by a certificate authority the browser already trusts. The browser checks the chain, the hostname and the expiry date.\n\nEphemeral keys give forward secrecy: recording traffic today and stealing the server's private key later does not reveal past sessions. After the handshake, data is encrypted with a fast symmetric cipher such as AES-GCM."
+    },
+    {
+      "id": "docker",
+      "title": "Docker images and containers",
+      "text": "# Docker images and containers\n\nAn image is a read-only template built from a Dockerfile. Each instruction creates a layer, and layers are cached. Put instructions that rarely change, like installing dependencies, before copying source code so rebuilds stay fast.\n\nA container is a running instance of an image with a thin writable layer on top. Containers share the host kernel and are isolated with namespaces and cgroups, which makes them far lighter than virtual machines.\n\nAnything written inside a container disappears when it is removed. Use volumes for data that must survive.\n\nMulti-stage builds compile in one stage and copy only the finished binary into a small final image, keeping compilers and build tools out of production."
+    },
+    {
+      "id": "kubernetes",
+      "title": "Kubernetes basics",
+      "text": "# Kubernetes basics\n\nKubernetes runs containers across a cluster of machines and keeps the actual state matching the declared state.\n\nA pod is the smallest unit: one or more containers sharing a network address. A deployment manages a set of identical pod replicas and performs rolling updates, replacing pods gradually so there is no downtime. If a pod crashes, the control plane starts a replacement.\n\nA service gives a stable name and virtual IP to a changing set of pods and load-balances between them.\n\nLiveness probes restart containers that hang. Readiness probes keep traffic away from containers that are not ready yet.\n\nThe horizontal pod autoscaler adds or removes replicas based on CPU or custom metrics."
+    },
+    {
+      "id": "git-rebase",
+      "title": "Git rebase vs merge",
+      "text": "# Git rebase vs merge\n\nMerging joins two branches with a merge commit and preserves exactly what happened, including the parallel history.\n\nRebasing replays your commits on top of another branch, producing a straight line of history with new commit hashes.\n\nGolden rule: never rebase commits that other people have already pulled, because rewriting shared history forces everyone to repair their copies.\n\nInteractive rebase (git rebase -i) lets you squash, reorder and reword commits before opening a pull request.\n\nIf a rebase goes wrong, git reflog lists where HEAD has been, so the old commits can be recovered. When you must push a rebased branch, prefer --force-with-lease, which refuses to overwrite work you have not seen."
+    },
+    {
+      "id": "hash-tables",
+      "title": "Hash tables",
+      "text": "# Hash tables\n\nA hash table stores key-value pairs in an array. A hash function maps each key to a bucket index, giving average O(1) insert, lookup and delete.\n\nTwo keys landing in the same bucket is a collision. Separate chaining keeps a list in each bucket. Open addressing probes for the next free slot in the array itself.\n\nThe load factor is entries divided by buckets. When it passes a threshold, commonly 0.75, the table allocates a bigger array and rehashes every entry. That resize is O(n), but amortized over many inserts the cost stays constant.\n\nWith a bad hash function or adversarial keys, everything collides and operations degrade to O(n).\n\nPython's dict and Java's HashMap are hash tables."
+    },
+    {
+      "id": "b-trees",
+      "title": "B-trees",
+      "text": "# B-trees\n\nA B-tree is a balanced search tree in which each node holds many keys and has many children. The high fan-out keeps the tree very shallow: a few levels can address billions of records.\n\nNodes are sized to match a disk page, so each step down the tree costs one disk read. That is why storage engines and file systems prefer B-trees over binary trees, which would need far more reads.\n\nWhen a node overflows it splits and pushes its middle key up to the parent; the tree grows from the root, so all leaves stay at the same depth.\n\nIn a B+ tree, values live only in the leaves and the leaves are linked together, which makes range scans a simple walk along the bottom level."
+    },
+    {
+      "id": "gradient-descent",
+      "title": "Gradient descent",
+      "text": "# Gradient descent\n\nTraining a model means minimizing a loss function. Gradient descent repeatedly computes the gradient of the loss with respect to the parameters and moves the parameters a small step in the opposite direction.\n\nThe learning rate sets the step size. Too large and the loss oscillates or diverges; too small and training crawls.\n\nStochastic gradient descent estimates the gradient from a mini-batch instead of the whole dataset. Updates are noisier but far cheaper, and the noise can help escape poor regions.\n\nMomentum accumulates past gradients to speed through flat stretches and damp zig-zagging. Adam adapts the step per parameter using running averages of the gradient and its square.\n\nSchedules such as warmup followed by cosine decay change the learning rate during training."
+    },
+    {
+      "id": "overfitting",
+      "title": "Overfitting and regularization",
+      "text": "# Overfitting and regularization\n\nA model overfits when it memorizes the training data, noise included, and fails to generalize. The symptom is training loss that keeps falling while validation loss starts rising.\n\nRemedies:\n\n- More data, or data augmentation.\n- L2 regularization (weight decay) penalizes large weights. L1 pushes weights to exactly zero, giving sparse models.\n- Dropout randomly disables units during training so the network cannot rely on any single path.\n- Early stopping halts training when the validation score stops improving.\n- A smaller model.\n\nThe opposite problem is underfitting: the model is too simple to capture the pattern and does badly even on training data. The balance between the two is the bias-variance tradeoff."
+    },
+    {
+      "id": "attention",
+      "title": "Transformers and self-attention",
+      "text": "# Transformers and self-attention\n\nA transformer processes all tokens of a sequence in parallel instead of one at a time like a recurrent network.\n\nIn self-attention, every token produces a query, a key and a value vector. The attention weight between two tokens is the scaled dot product of one's query with the other's key, passed through a softmax. Each token's new representation is the weighted sum of all the values, so it can draw information from any position, however distant.\n\nMulti-head attention runs several attention operations side by side, letting different heads track different relationships.\n\nAttention itself ignores order, so positional encodings are added to the token embeddings.\n\nCost grows with the square of the sequence length, which is what limits context size."
+    },
+    {
+      "id": "vector-search",
+      "title": "Embeddings and vector search",
+      "text": "# Embeddings and vector search\n\nAn embedding model turns a piece of text into a vector of a few hundred numbers such that texts with similar meaning land close together. Closeness is usually measured with cosine similarity.\n\nSemantic search embeds the query and returns the nearest stored vectors, so it finds relevant passages that share no words with the query.\n\nComparing against every vector is exact but slow at scale. Approximate nearest neighbor indexes such as HNSW, a layered graph you navigate greedily, trade a little recall for a large speedup.\n\nRetrieval-augmented generation (RAG) feeds the retrieved passages to a language model so its answer is grounded in your documents.\n\nHybrid search combines vector results with BM25 keyword results, often by reciprocal rank fusion, because keyword matching is still better for exact names and codes."
+    },
+    {
+      "id": "spaced-repetition",
+      "title": "Spaced repetition",
+      "text": "# Spaced repetition\n\nMemory fades along a forgetting curve, first described by Ebbinghaus. Reviewing a fact just before you would forget it resets the curve and makes it flatter, so each review can be scheduled further out than the last: one day, three days, a week, a month.\n\nActive recall, forcing yourself to produce the answer, strengthens memory much more than rereading. Flashcards make this easy.\n\nAnki automates the schedule. Its algorithm descends from SM-2: every card has an ease factor, and how you grade your answer stretches or shrinks the next interval.\n\nGood cards are atomic: one fact per card, phrased as a question. Do the reviews daily, because a backlog grows quickly."
+    },
+    {
+      "id": "deep-work",
+      "title": "Deep work and the Pomodoro technique",
+      "text": "# Deep work and the Pomodoro technique\n\nDeep work is distraction-free concentration on a cognitively demanding task. Cal Newport argues it is both increasingly rare and increasingly valuable.\n\nSwitching tasks leaves attention residue: part of your mind stays on the previous task for many minutes, so even a quick glance at messages is costly.\n\nThe Pomodoro technique structures focus: work for 25 minutes, rest for 5, and take a longer 15 to 30 minute break after four rounds.\n\nPractical habits: block focus hours on the calendar, put the phone in another room, batch email and chat into fixed slots, and end the day with a shutdown ritual that lists tomorrow's first task.\n\nMost people manage about four hours of real deep work per day."
+    },
+    {
+      "id": "sleep",
+      "title": "Sleep and memory consolidation",
+      "text": "# Sleep and memory consolidation\n\nDuring sleep the brain replays the day's experiences and moves them from the hippocampus, a temporary store, into the cortex for the long term. Slow-wave (deep) sleep mainly consolidates facts and events. REM sleep helps with skills, emotional processing and creative connections.\n\nA full cycle takes about 90 minutes. Deep sleep dominates early in the night and REM dominates toward morning, so cutting the night short costs mostly REM.\n\nStaying up all night before an exam backfires: the material studied never gets consolidated.\n\nCaffeine has a half-life of roughly five to six hours, so an afternoon coffee is still active at bedtime. Keep a regular schedule, a cool dark room, and avoid screens before bed."
+    },
+    {
+      "id": "sourdough",
+      "title": "Sourdough bread recipe",
+      "text": "# Sourdough bread recipe\n\nIngredients: 500 g bread flour, 375 g water (75% hydration), 100 g active starter, 10 g salt.\n\nMix flour and water and rest 30 minutes (autolyse). Add starter and salt.\n\nBulk fermentation: 4 to 6 hours at room temperature. Do a set of stretch and folds every 30 minutes for the first two hours to build gluten. The dough is ready when it has grown by about half and jiggles.\n\nShape, place in a floured banneton, and proof in the fridge overnight for flavor.\n\nBake in a preheated Dutch oven at 250 C: 20 minutes with the lid on to trap steam, then 20 to 25 minutes with the lid off at 220 C until deep brown. Score the top with a blade just before baking so it can expand. Cool for at least an hour before slicing."
+    },
+    {
+      "id": "compound-interest",
+      "title": "Compound interest and index funds",
+      "text": "# Compound interest and index funds\n\nCompound interest means earning returns on past returns. The formula is A = P(1 + r/n)^(nt), where P is the starting amount, r the annual rate, n the compounding periods per year and t the years.\n\nRule of 72: divide 72 by the annual return in percent to estimate the years needed to double. At 8% money doubles in about nine years.\n\nTime matters more than amount. Someone who invests from age 25 to 35 and stops can end up with more than someone who starts at 35 and invests until 65.\n\nA low-cost index fund holds the entire market and charges a tiny expense ratio. Fees compound too: a 1% annual fee can eat roughly a quarter of the final balance over several decades.\n\nDollar-cost averaging, investing a fixed sum every month, removes the temptation to time the market."
+    },
+    {
+      "id": "marathon",
+      "title": "Marathon training plan",
+      "text": "# Marathon training plan\n\nA first marathon needs 16 to 20 weeks. Build weekly mileage gradually, by no more than about 10% a week, to avoid injury.\n\nThe weekly long run is the key session. Extend it step by step to a peak of 30 to 32 km about three weeks before race day. Around 80% of all running should be at an easy, conversational pace; the rest is tempo runs and intervals.\n\nTaper for the final two to three weeks: cut volume while keeping a little intensity so the legs arrive fresh.\n\nHitting the wall around kilometre 30 is glycogen running out. Carb-load for two days beforehand and take 30 to 60 g of carbohydrate per hour during the race from gels or sports drink. Never try new shoes or food on race day."
+    }
+  ],
+  "questions": [
+    {"q": "What is a cache stampede and how do I prevent it?", "doc": "caching"},
+    {"q": "Many requests hammer the database at the same moment right after a popular entry expires. How do I stop that?", "doc": "caching"},
+    {"q": "How does a CDN route visitors to the nearest edge server?", "doc": "cdn"},
+    {"q": "How do I make sure people get the newest version of my site's files instead of an old stored copy?", "doc": "cdn"},
+    {"q": "What is the leftmost prefix rule for a composite index?", "doc": "db-indexes"},
+    {"q": "Why do my inserts get slower every time I add another way to speed up lookups?", "doc": "db-indexes"},
+    {"q": "What is the default isolation level in PostgreSQL?", "doc": "isolation"},
+    {"q": "New records matching my filter showed up halfway through my unit of work. What is that called?", "doc": "isolation"},
+    {"q": "Which databases are AP systems under the CAP theorem?", "doc": "cap"},
+    {"q": "When the network splits, why must a store choose between rejecting requests and returning stale data?", "doc": "cap"},
+    {"q": "How does leader election work in Raft?", "doc": "raft"},
+    {"q": "How many machines can crash in a five-server group before it can no longer agree on anything?", "doc": "raft"},
+    {"q": "What is a dead letter queue?", "doc": "queues"},
+    {"q": "Why should my worker be safe to run twice on the same job?", "doc": "queues"},
+    {"q": "How does the token bucket algorithm work?", "doc": "rate-limiting"},
+    {"q": "Which status code should my API return when one client is sending too much traffic?", "doc": "rate-limiting"},
+    {"q": "What does PKCE protect against in OAuth?", "doc": "oauth"},
+    {"q": "How can a third-party app act on my account without ever seeing my password?", "doc": "oauth"},
+    {"q": "Is the payload of a JWT encrypted?", "doc": "jwt"},
+    {"q": "Why is it hard to log someone out early when the server keeps no session?", "doc": "jwt"},
+    {"q": "What is forward secrecy in TLS?", "doc": "tls"},
+    {"q": "How does my browser know the website is really who it claims to be?", "doc": "tls"},
+    {"q": "What are multi-stage builds in Docker?", "doc": "docker"},
+    {"q": "Why did my files vanish after I removed the running instance?", "doc": "docker"},
+    {"q": "What is the difference between liveness and readiness probes?", "doc": "kubernetes"},
+    {"q": "How do I ship a new version gradually without taking the app offline?", "doc": "kubernetes"},
+    {"q": "When should I avoid git rebase?", "doc": "git-rebase"},
+    {"q": "I messed up my history rewrite. How do I get the lost commits back?", "doc": "git-rebase"},
+    {"q": "What is the load factor of a hash table?", "doc": "hash-tables"},
+    {"q": "Why are dictionary lookups usually constant time, and when do they become slow?", "doc": "hash-tables"},
+    {"q": "Why do databases use B-trees instead of binary trees?", "doc": "b-trees"},
+    {"q": "Which structure keeps lookups to a handful of disk reads even with billions of records?", "doc": "b-trees"},
+    {"q": "What happens if the learning rate is too large?", "doc": "gradient-descent"},
+    {"q": "How does an optimizer like Adam decide how far to move each weight?", "doc": "gradient-descent"},
+    {"q": "How does dropout reduce overfitting?", "doc": "overfitting"},
+    {"q": "My network scores great on examples it has seen but poorly on new ones. What can I do?", "doc": "overfitting"},
+    {"q": "Why do transformers need positional encodings?", "doc": "attention"},
+    {"q": "How can a word take information from another word far away in the sentence?", "doc": "attention"},
+    {"q": "What is HNSW?", "doc": "vector-search"},
+    {"q": "How can I find passages related to my question even when they use completely different wording?", "doc": "vector-search"},
+    {"q": "What is the forgetting curve?", "doc": "spaced-repetition"},
+    {"q": "What is the best timing for going back over flashcards so I remember them long term?", "doc": "spaced-repetition"},
+    {"q": "How long is a Pomodoro work interval?", "doc": "deep-work"},
+    {"q": "Why does quickly checking chat hurt my concentration for a long time afterwards?", "doc": "deep-work"},
+    {"q": "What does REM sleep do for memory?", "doc": "sleep"},
+    {"q": "Is pulling an all-nighter before a test a good idea?", "doc": "sleep"},
+    {"q": "What hydration does the sourdough recipe use?", "doc": "sourdough"},
+    {"q": "What oven temperature and timing do I use for the loaf?", "doc": "sourdough"},
+    {"q": "What is the rule of 72?", "doc": "compound-interest"},
+    {"q": "Why does starting to invest ten years earlier make such a big difference?", "doc": "compound-interest"},
+    {"q": "How long should the taper be before a marathon?", "doc": "marathon"},
+    {"q": "How do I avoid running out of energy late in a long race?", "doc": "marathon"}
+  ]
+}
