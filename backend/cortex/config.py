@@ -22,7 +22,14 @@ def _load_env_file(path: Path) -> None:
 _load_env_file(PROJECT_DIR / ".env")
 _load_env_file(BACKEND_DIR / ".env")
 
-DATA_DIR = Path(os.environ.get("CORTEX_DATA_DIR", BACKEND_DIR / "data"))
+# Vercel sets VERCEL=1. Its functions can only write to /tmp, which is wiped whenever an
+# instance is recycled and is not shared between instances, so saved notes do not last.
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+STORAGE_IS_TEMPORARY = ON_VERCEL and "CORTEX_DATA_DIR" not in os.environ
+
+DATA_DIR = Path(
+    os.environ.get("CORTEX_DATA_DIR", "/tmp/cortex" if ON_VERCEL else BACKEND_DIR / "data")
+)
 DB_PATH = DATA_DIR / "cortex.db"
 
 EMBED_MODEL = os.environ.get("CORTEX_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
@@ -47,4 +54,5 @@ GRAPH_MIN_SIMILARITY = float(os.environ.get("CORTEX_GRAPH_MIN_SIM", "0.15"))
 GRAPH_MIN_SIMILARITY_RAW = 0.65
 GRAPH_MAX_LINKS_PER_NOTE = 3
 
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+# Vercel rejects request bodies over 4.5 MB before they reach the app.
+MAX_UPLOAD_BYTES = (4 if ON_VERCEL else 25) * 1024 * 1024

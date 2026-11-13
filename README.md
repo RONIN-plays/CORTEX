@@ -43,7 +43,7 @@ Requires Python 3.12+ and Node 20+.
 # 1. Backend
 cd backend
 py -3.12 -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
 
 # 2. Frontend
 cd ..\frontend
@@ -101,6 +101,27 @@ cd backend
 ```
 
 Tests run offline with a stand-in embedder and never call the LLM.
+
+## Deploy to Vercel
+
+`vercel.json` deploys the repo as one Vercel project with two services:
+
+| Service | Folder | Public path |
+|---|---|---|
+| `frontend` | `frontend/` (Vite static build) | everything except `/api` |
+| `backend` | `backend/` (FastAPI, entrypoint `cortex.main:app`) | `/api/*` |
+
+The browser calls `/api/...` on the same domain, so the services need no bindings. The backend receives the full path, including `/api`.
+
+1. Import the GitHub repo into Vercel. It reads `vercel.json` from the repo root.
+2. In the project settings, add the environment variable `GROQ_API_KEY`.
+3. Deploy. To test locally first, run `vercel dev` in the project root.
+
+Limits on Vercel:
+
+- **Notes don't persist.** Functions can only write to `/tmp`, which is wiped whenever an instance is recycled and isn't shared between instances. The page shows a warning about this. Lasting storage needs a hosted database.
+- **Uploads are capped at 4 MB per file** (Vercel rejects request bodies over 4.5 MB).
+- **The first request after a cold start is slow**, because the embedding model (about 64 MB) downloads into `/tmp`.
 
 ## Settings
 

@@ -68,6 +68,8 @@ def create_app(store: Store | None = None, embedder: Embedder | None = None) -> 
             "has_api_key": llm.has_credentials(),
             "llm_model": config.LLM_MODEL,
             "embed_model": config.EMBED_MODEL,
+            "storage_is_temporary": config.STORAGE_IS_TEMPORARY,
+            "max_upload_mb": config.MAX_UPLOAD_BYTES // (1024 * 1024),
         }
 
     @app.get("/api/documents")
@@ -90,7 +92,8 @@ def create_app(store: Store | None = None, embedder: Embedder | None = None) -> 
             name = file.filename or "upload"
             data = file.file.read(config.MAX_UPLOAD_BYTES + 1)
             if len(data) > config.MAX_UPLOAD_BYTES:
-                results.append({"filename": name, "error": "File is larger than 25 MB."})
+                limit_mb = config.MAX_UPLOAD_BYTES // (1024 * 1024)
+                results.append({"filename": name, "error": f"File is larger than {limit_mb} MB."})
                 continue
             try:
                 result = ingest.ingest_file(app.state.store, app.state.embedder, name, data)

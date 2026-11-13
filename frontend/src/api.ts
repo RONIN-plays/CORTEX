@@ -4,6 +4,8 @@ export interface Health {
   has_api_key: boolean;
   llm_model: string;
   embed_model: string;
+  storage_is_temporary: boolean;
+  max_upload_mb: number;
 }
 
 export interface DocSummary {
@@ -66,7 +68,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, init);
   } catch {
-    throw new Error("Cannot reach the Cortex server. Is the backend running on port 8000?");
+    throw new Error("Cannot reach the Cortex server. Check that the backend is running.");
+  }
+  if (response.status === 413) {
+    throw new Error("This file is too large for the server to accept.");
   }
   if (!response.ok) {
     let detail = `Request failed (${response.status})`;
@@ -76,7 +81,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       else if (Array.isArray(body.detail) && body.detail[0]?.msg) detail = body.detail[0].msg;
     } catch {
       // The proxy answers with a non-JSON 5xx when the backend is down.
-      if (response.status >= 500) detail = "The Cortex server is not responding. Is the backend running?";
+      if (response.status >= 500) detail = "The Cortex server is not responding. Check that the backend is running.";
     }
     throw new Error(detail);
   }
@@ -96,10 +101,19 @@ export const api = {
   deleteDocument: (id: number) => request<unknown>(`/api/documents/${id}`, { method: "DELETE" }),
   addNote: (title: string, text: string) => request<IngestResult>("/api/documents/text", json({ title, text })),
   addUrl: (url: string) => request<IngestResult>("/api/documents/url", json({ url })),
-  upload: (files: File[]) => {
-    const form = new FormData();
-    files.forEach((file) => form.append("files", file));
-    return request<IngestResult[]>("/api/documents/upload", { method: "POST", body: form });
+  /** One request per file, so a size limit or failure affects only that file. */
+  upload: async (files: File[]) => {
+    const results: IngestResult[] = [];
+    for (const file of files) {
+      const form = new FormData();
+      form.append("files", file);
+      try {
+        results.push(...(await request<IngestResult[]>("/api/documents/upload", { method: "POST", body: form })));
+      } catch (error) {
+        results.push({ filename: file.name, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return results;
   },
   search: (q: string, mode: SearchMode) =>
     request<Hit[]>(`/api/search?q=${encodeURIComponent(q)}&mode=${mode}&k=12`),
@@ -118,7 +132,7 @@ export async function streamChat(
     response = await fetch("/api/chat", { ...json({ question, history }), signal });
   } catch (error) {
     if (signal.aborted) throw error;
-    throw new Error("Cannot reach the Cortex server. Is the backend running on port 8000?");
+    throw new Error("Cannot reach the Cortex server. Check that the backend is running.");
   }
   if (!response.ok || !response.body) {
     throw new Error(

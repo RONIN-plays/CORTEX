@@ -88,6 +88,11 @@ export default function App() {
             .
           </div>
         )}
+        {health?.storage_is_temporary && (
+          <div className="banner banner-warn">
+            This is a demo deployment: saved notes are kept only temporarily and may disappear at any time.
+          </div>
+        )}
         {/* Chat stays mounted so the conversation survives switching views. */}
         <div className="view" hidden={view !== "ask"}>
           <Chat
